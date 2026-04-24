@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Training Hub"/>
+  <meta name="theme-color" content="#0B131C"/>
+  <title>Jon's Training Hub</title>
+  <link rel="manifest" href="manifest.json"/>
+  <!-- Apple touch icon (generated inline via canvas fallback) -->
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    body{background:#0B131C;color:#E0EAF4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;min-height:100vh;overscroll-behavior:none;}
+    button{font-family:inherit;cursor:pointer;}
+    input{font-family:inherit;}
+    #loading{display:flex;align-items:center;justify-content:center;height:100vh;color:#4A5A6A;font-size:14px;}
+    #app{display:none;}
+  </style>
+</head>
+<body>
+  <div id="loading">Loading…</div>
+  <div id="app"></div>
+
+  <!-- React + Babel (CDN, no build step needed) -->
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <script type="text/babel">
+  // ─── Will be populated from training-data.json ───────────────────────────
+  let DATA = null;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  STORAGE
+  // ══════════════════════════════════════════════════════════════════════════
+  function load(key, def) {
+    try { const v = localStorage.getItem("training_"+key); return v !== null ? JSON.parse(v) : def; }
+    catch { return def; }
+  }
+  function save(key, val) {
+    try { localStorage.setItem("training_"+key, JSON.stringify(val)); } catch {}
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  UTILITIES
+  // ══════════════════════════════════════════════════════════════════════════
+  function r5(v) { return Math.round(v / 5) * 5; }
+  function calcWeek(startDate) {
+    if (!startDate) return null;
+    const days = Math.floor((Date.now() - new Date(startDate).getTime()) / 86400000);
+    if (days < 0) return 1;
+    return Math.floor(days / 7) + 1;
+  }
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  }
+  function getFlexPhaseIdx(week) {
+    if (week <= 2) return 0; if (week <= 4) return 1; if (week <= 6) return 2; return 3;
+  }
+  function getDLPhaseIdx(week) {
+    if (week <= 3) return 0; if (week <= 6) return 1; return 2;
+  }
+
+  function generateCycleWeeks(estMax) {
+    return [
+      { week:1, phase:"A", sets:"3×8",              weight:r5(estMax*0.60), rpe:"6–7", deload:false, note:"Controlled tempo, reset each rep",             sugAcc:["RDL 3×10","Barbell Row 3×8","Plank 3×30s"] },
+      { week:2, phase:"A", sets:"3×7",              weight:r5(estMax*0.65), rpe:"7",   deload:false, note:"Slight jump, drop a rep",                       sugAcc:["RDL 3×10","Hip Thrust 3×10","Pallof Press 3×10"] },
+      { week:3, phase:"A", sets:"3×6",              weight:r5(estMax*0.70), rpe:"7–8", deload:false, note:"Top of hypertrophy range",                      sugAcc:["Deficit DL 3×6","DB Row 3×10","Ab Wheel 3×8"] },
+      { week:4, phase:"B", sets:"Top×3, 2×4 BO",   weight:r5(estMax*0.80), backoff:r5(estMax*0.72), rpe:"8",   deload:false, note:"First heavy session — find groove",           sugAcc:["Paused DL 2×4","DB Row 3×8"] },
+      { week:5, phase:"B", sets:"Top×3, 2×3 BO",   weight:r5(estMax*0.85), backoff:r5(estMax*0.75), rpe:"8",   deload:false, note:"Moderate jump, back-off drops to triples",   sugAcc:["Block Pull 3×3","Barbell Row 3×6"] },
+      { week:6, phase:"B", sets:"Top×2, 1×3 BO",   weight:r5(estMax*0.90), backoff:r5(estMax*0.77), rpe:"8–9", deload:false, note:"Heaviest training day — stay tight",         sugAcc:["Light RDL 2×6","Ab Wheel 3×10"] },
+      { week:7, phase:"C", sets:"2×3 light",        weight:r5(estMax*0.60), rpe:"5",   deload:true,  note:"DELOAD — stay sharp, recover for test",        sugAcc:[] },
+      { week:8, phase:"C", sets:"MAX TEST",         weight:null,            rpe:"10",  deload:false, note:"Full rest between attempts (3–5 min)",          sugAcc:[], isTest:true,
+        warmup:[r5(estMax*0.60),r5(estMax*0.75),r5(estMax*0.88),r5(estMax*0.95),r5(estMax*1.02),r5(estMax*1.07)] },
+    ];
+  }
+
+  const TYPE_COLORS = {
+    "Dynamic":"#2E7D32","CARs":"#1565C0","Static":"#6A1B9A",
+    "Static + Active":"#AD1457","Tempo":"#E65100",
+    "Strength Dev":"#B71C1C","Contract-Relax":"#880E4F","Active":"#00695C",
+  };
+  const DAYS = ["mon","tue","wed","thu","fri","sat","sun"];
+  const DAY_LABELS = {mon:"MON",tue:"TUE",wed:"WED",thu:"THU",fri:"FRI",sat:"SAT",sun:"SUN"};
+  const DL_COLOR = "#B71C1C";
+  const DL_ACCENT = "#E57373";
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  SHARED UI
+  // ══════════════════════════════════════════════════════════════════════════
+  const { useState, useEffect } = React;
+
+  function Bar({ pct, color, height=4 }) {
+    return <div style={{height,backgroundColor:"rgba(255,255,255,0.08)",borderRadius:2}}>
+      <div style={{height:"100%",borderRadius:2,backgroundColor:color,width:`${Math.min(100,Math.max(0,pct))}%`,transition:"width 0.4s"}}/>
+    </div>;
+  }
+  function TypeBadge({ type }) {
+    return <span style={{display:"inline-block",padding:"2px 7px",borderRadius:3,fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.4px",backgroundColor:TYPE_COLORS[type]||"#555"}}>{type}</span>;
+  }
+  function PhaseBar({ phases, activeIdx, color="#C8A84B" }) {
+    return <div style={{display:"flex",gap:3,marginBottom:10}}>
+      {phases.map((p,i)=>(
+        <div key={i} style={{flex:1}}>
+          <div style={{height:3,borderRadius:2,backgroundColor:i<=activeIdx?color:"#1E2D3D",transition:"background 0.3s",marginBottom:3}}/>
+          <div style={{fontSize:9,color:i===activeIdx?color:"#2A3A4A",fontWeight:i===activeIdx?700:400}}>{p}</div>
+        </div>
+      ))}
+    </div>;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  FLEXIBILITY COMPONENTS
+  // ══════════════════════════════════════════════════════════════════════════
+  function ExerciseRow({ ex, phaseIdx, checked, onToggle, idx }) {
+    return <div onClick={onToggle} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"13px 18px",backgroundColor:checked?"#081A10":(idx%2===0?"#181F2A":"#1C2534"),borderLeft:`3px solid ${checked?"#2ECC71":"transparent"}`,cursor:"pointer",transition:"background 0.15s"}}>
+      <div style={{width:18,height:18,borderRadius:3,flexShrink:0,marginTop:3,border:`2px solid ${checked?"#2ECC71":"#3A4A5A"}`,backgroundColor:checked?"#2ECC71":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {checked&&<span style={{color:"#081A10",fontSize:11,fontWeight:900,lineHeight:1}}>✓</span>}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,marginBottom:5}}>
+          <span style={{fontSize:14,fontWeight:700,lineHeight:1.2,color:checked?"#3A5A4A":"#E0EAF4",textDecoration:checked?"line-through":"none"}}>{ex.name}</span>
+          <TypeBadge type={ex.type}/>
+          {ex.side&&ex.side!=="—"&&<span style={{fontSize:10,color:"#8899AA",fontStyle:"italic"}}>{ex.side}</span>}
+        </div>
+        <div style={{fontSize:13,fontWeight:700,color:"#C8A84B",marginBottom:5}}>{ex.prescriptions[phaseIdx]}</div>
+        <div style={{fontSize:11,color:"#5A6A7D",lineHeight:1.55}}>{ex.notes}</div>
+      </div>
+    </div>;
+  }
+
+  function SessionModal({ sessionKey, week, completed, onToggle, onClose }) {
+    const sessions = DATA.flexibility.sessions;
+    const sessionMeta = DATA.flexibility.sessionMeta;
+    const phases = DATA.flexibility.phases;
+    const phaseDescs = DATA.flexibility.phaseDescs;
+    const phaseWeeks = DATA.flexibility.phaseWeeks;
+    const session = sessions[sessionKey], meta = sessionMeta[sessionKey];
+    const phaseIdx = getFlexPhaseIdx(week);
+    const total = session.exercises.length;
+    const done = session.exercises.filter((_,i)=>completed.has(`w${week}-${sessionKey}-${i}`)).length;
+    return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+      <div style={{width:"min(700px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{backgroundColor:meta.color,padding:"22px 24px 18px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.55)",letterSpacing:2,marginBottom:5}}>SESSION {sessionKey} · {meta.day} · WEEK {week}</div>
+              <div style={{fontSize:21,fontWeight:800,color:"#fff",marginBottom:4}}>{meta.label}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.65)",lineHeight:1.4}}>{session.focus}</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.12)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+          </div>
+          <div style={{marginTop:18}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.65)"}}>{done===total&&total>0?"✓ Complete!":`${done} / ${total} exercises`}</span>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.65)"}}>{phases[phaseIdx]} · {phaseWeeks[phaseIdx]}</span>
+            </div>
+            <Bar pct={(done/total)*100} color="rgba(255,255,255,0.5)"/>
+          </div>
+        </div>
+        <div style={{padding:"9px 18px",backgroundColor:"#151F2A",fontSize:11,color:"#6A7A8D",fontStyle:"italic",borderBottom:"1px solid #1E2D3D"}}>⚡ {phaseDescs[phaseIdx]}</div>
+        <div>{session.exercises.map((ex,i)=><ExerciseRow key={i} idx={i} ex={ex} phaseIdx={phaseIdx} checked={completed.has(`w${week}-${sessionKey}-${i}`)} onToggle={()=>onToggle(`w${week}-${sessionKey}-${i}`)}/>)}</div>
+        {done===total&&total>0&&<div style={{padding:"16px 24px",backgroundColor:"#081A10",textAlign:"center",fontSize:14,fontWeight:700,color:"#2ECC71"}}>Session complete. Great work.</div>}
+      </div>
+    </div>;
+  }
+
+  function CoachingBanner({ intensities }) {
+    const day = intensities.sun?"sun":intensities.sat?"sat":null;
+    if (!day) return null;
+    const map = {
+      easy:     {c:"#27AE60",bg:"#071A0E",msg:"Fingers feel fresh. Wrist wrench ✓ · Pinch work ✓ · Tindeq repeaters: save for Wed, not tonight."},
+      moderate: {c:"#E67E22",bg:"#1A0F00",msg:"Good session. Wrist wrench ✓ · Skip Tindeq tonight — protect Tuesday's limit bouldering. Light pinch only if truly fresh."},
+      hard:     {c:"#C0392B",bg:"#1A0505",msg:"Solid send day. Recovery only tonight — Session F + rest. No extra finger work. Tendons need it."},
+    };
+    const r = map[intensities[day]]; if(!r) return null;
+    return <div style={{margin:"0 0 14px",padding:"12px 16px",borderRadius:8,backgroundColor:r.bg,borderLeft:`3px solid ${r.c}`}}>
+      <div style={{fontSize:10,fontWeight:700,color:r.c,letterSpacing:1,marginBottom:4}}>COACHING NOTE</div>
+      <div style={{fontSize:12,color:"#A0B4CC",lineHeight:1.5}}>{r.msg}</div>
+    </div>;
+  }
+
+  function IntensityPicker({ day, value, onChange }) {
+    return <div style={{display:"flex",gap:3,marginTop:7}}>
+      {[{key:"easy",label:"Easy",color:"#27AE60"},{key:"moderate",label:"Mod",color:"#E67E22"},{key:"hard",label:"Hard",color:"#C0392B"}].map(o=>(
+        <button key={o.key} onClick={e=>{e.stopPropagation();onChange(day,value===o.key?null:o.key);}} style={{flex:1,padding:"3px 0",borderRadius:3,border:"1px solid",borderColor:value===o.key?o.color:"#2C3A4A",backgroundColor:value===o.key?o.color:"transparent",color:value===o.key?"#fff":"#4A5A6A",fontSize:9,fontWeight:700,cursor:"pointer"}}>
+          {o.label}
+        </button>
+      ))}
+    </div>;
+  }
+
+  function MorningModal({ onClose }) {
+    const blocks = DATA.flexibility.morningBlocks;
+    return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+      <div style={{width:"min(640px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{backgroundColor:"#1C2B3A",padding:"20px 24px 16px",borderBottom:"1px solid #2A3A4A"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"#C8A84B",letterSpacing:2,marginBottom:4}}>DAILY</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Morning Mobility Ritual</div>
+              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>~45 min · every day · the foundation</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+        </div>
+        <div style={{padding:"16px 24px"}}>
+          {blocks.map((block,bi)=>(
+            <div key={bi} style={{marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,fontWeight:700,color:"#C8A84B"}}>{block.title}</span>
+                <span style={{fontSize:11,color:"#4A5A6A"}}>{block.dur}</span>
+              </div>
+              <div style={{paddingLeft:12,borderLeft:"2px solid #2A3A4A"}}>
+                {block.exs.map((ex,ei)=><div key={ei} style={{fontSize:12,color:"#8899AA",padding:"3px 0"}}>· {ex}</div>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>;
+  }
+
+  function Sparkline({ entries, metricKey, color, direction }) {
+    if (entries.length < 2) return null;
+    const vals = entries.map(e=>Number(e[metricKey]||0));
+    const mn = Math.min(...vals), mx = Math.max(...vals);
+    const range = mx - mn || 1;
+    const w = 160, h = 40, pad = 4;
+    const pts = vals.map((v,i)=>{
+      const x = pad + (i/(vals.length-1))*(w-pad*2);
+      const y = pad + (direction==="down" ? (v-mn)/range : 1-(v-mn)/range) * (h-pad*2);
+      return `${x},${y}`;
+    }).join(" ");
+    return <svg width={w} height={h} style={{overflow:"visible"}}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
+      {vals.map((v,i)=>{
+        const x = pad+(i/(vals.length-1))*(w-pad*2);
+        const y = pad+(direction==="down"?(v-mn)/range:1-(v-mn)/range)*(h-pad*2);
+        return <circle key={i} cx={x} cy={y} r="3" fill={color}/>;
+      })}
+    </svg>;
+  }
+
+  function MetricCard({ metric, entries }) {
+    const vals = entries.map(e=>e[metric.key]).filter(v=>v!==undefined&&v!=="");
+    if (vals.length === 0) return null;
+    const first = vals[0], last = vals[vals.length-1];
+    const change = last - first;
+    const isGood = metric.direction==="down" ? change<0 : change>0;
+    const total = Math.abs(metric.target - first) || 1;
+    const progress = Math.abs(last - first) / total;
+    return <div style={{backgroundColor:"#111C28",borderRadius:8,padding:"14px 16px",border:`1px solid ${metric.color}33`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:metric.color,marginBottom:2}}>{metric.label}</div>
+          <div style={{fontSize:11,color:"#4A5A6A"}}>{metric.unit}</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>{last}</div>
+          {vals.length>1&&<div style={{fontSize:11,fontWeight:700,color:isGood?"#2ECC71":"#E74C3C"}}>
+            {isGood?"▲":"▼"} {Math.abs(change).toFixed(1)} from baseline
+          </div>}
+        </div>
+      </div>
+      <Bar pct={progress*100} color={metric.color} height={5}/>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:5,fontSize:10,color:"#3A4A5A"}}>
+        <span>Baseline: {first}</span>
+        <span>{Math.round(progress*100)}% to goal ({metric.target} {metric.unit})</span>
+      </div>
+    </div>;
+  }
+
+  function FlexPlanTab({ schedule, setSchedule, completed, toggleExercise, intensities, setIntensities, currentWeek, setActiveSession, showMorning, setShowMorning, onViewWeekChange, viewWeek }) {
+    const [movingSession, setMovingSession] = useState(null);
+    const activeWeek = viewWeek || currentWeek;
+    const sessions = DATA.flexibility.sessions;
+    const sessionMeta = DATA.flexibility.sessionMeta;
+    const climbingDays = DATA.flexibility.climbingDays;
+
+    function handleDayClick(day) {
+      if (movingSession) {
+        const fromDay = Object.entries(schedule).find(([,v])=>v===movingSession)?.[0];
+        const next = {...schedule};
+        if (fromDay) next[fromDay] = schedule[day]||null;
+        next[day] = movingSession;
+        setSchedule(next);
+        setMovingSession(null);
+      } else if (schedule[day]) {
+        setActiveSession({ key: schedule[day], week: activeWeek });
+      }
+    }
+
+    return <div style={{maxWidth:920,margin:"0 auto",padding:"18px 14px"}}>
+      <CoachingBanner intensities={intensities}/>
+      <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:"#4A5A6A",fontWeight:700,letterSpacing:1}}>WEEK</span>
+        {[1,2,3,4,5,6,7,8].map(w=>{
+          const isCurrent = w === currentWeek;
+          const isActive = w === activeWeek;
+          return <button key={w} onClick={()=>onViewWeekChange(w)} style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${isActive?"#C8A84B":isCurrent?"#3A4A5A":"#1E2D3D"}`,backgroundColor:isActive?"#C8A84B":isCurrent?"#1A2535":"transparent",color:isActive?"#111C28":isCurrent?"#C8A84B88":"#3A4A5A",fontSize:12,fontWeight:700,cursor:"pointer",position:"relative"}}>
+            {w}
+            {isCurrent&&!isActive&&<span style={{position:"absolute",top:2,right:2,width:4,height:4,borderRadius:"50%",backgroundColor:"#C8A84B",display:"block"}}/>}
+          </button>;
+        })}
+        {activeWeek!==currentWeek&&<button onClick={()=>onViewWeekChange(currentWeek)} style={{padding:"5px 10px",borderRadius:5,border:"1px solid #2A3A4A",backgroundColor:"transparent",color:"#4A5A6A",fontSize:10,cursor:"pointer",fontWeight:600}}>↩ current</button>}
+      </div>
+      {activeWeek!==currentWeek&&<div style={{marginBottom:12,padding:"8px 12px",borderRadius:6,backgroundColor:"#12100A",border:"1px solid #2A2010",fontSize:11,color:"#C8A84B88"}}>Viewing Week {activeWeek} — checks here won't affect your current week ({currentWeek})</div>}
+      {movingSession&&<div style={{marginBottom:14,padding:"10px 14px",borderRadius:7,backgroundColor:"#16120A",borderLeft:"3px solid #C8A84B",fontSize:12,color:"#C8A84B"}}>Moving <strong>Session {movingSession}</strong> — tap a day to place it · <span style={{textDecoration:"underline",cursor:"pointer"}} onClick={()=>setMovingSession(null)}>cancel</span></div>}
+      <div onClick={()=>setShowMorning(true)} style={{marginBottom:14,padding:"11px 16px",borderRadius:8,backgroundColor:"#111C28",border:"1px solid #1E2D3D",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+        <span style={{fontSize:20}}>🌅</span>
+        <div style={{flex:1}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#C8A84B"}}>Morning Ritual</span>
+          <span style={{fontSize:11,color:"#4A5A6A"}}> · ~45 min · every day</span>
+        </div>
+        <span style={{fontSize:11,color:"#2C3A4A"}}>view ›</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:8,marginBottom:16}}>
+        {DAYS.map(day=>{
+          const sk=schedule[day], meta=sk?sessionMeta[sk]:null;
+          const isMoving=movingSession===sk;
+          const exCount=sk?sessions[sk].exercises.length:0;
+          const exDone=sk?sessions[sk].exercises.filter((_,i)=>completed.has(`w${activeWeek}-${sk}-${i}`)).length:0;
+          return <div key={day} onClick={()=>(sk||movingSession)&&handleDayClick(day)} style={{borderRadius:8,overflow:"hidden",border:`1px solid ${isMoving?"#C8A84B":(sk?meta.color+"55":"#1A2535")}`,backgroundColor:sk?"#111C28":"#0D1620",cursor:(sk||movingSession)?"pointer":"default",opacity:movingSession&&sk&&!isMoving?0.45:1,transition:"all 0.15s",minHeight:110}}>
+            <div style={{padding:"5px 8px",backgroundColor:sk?meta.color:"#111C28",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:10,fontWeight:800,color:"#fff",letterSpacing:1}}>{DAY_LABELS[day]}</span>
+              {climbingDays.includes(day)&&<span style={{fontSize:9,color:"rgba(255,255,255,0.6)"}}>🧗</span>}
+            </div>
+            <div style={{padding:"8px 8px 10px"}}>
+              {sk ? <>
+                <div style={{fontSize:11,fontWeight:700,color:"#D0DCE8",lineHeight:1.3,marginBottom:3}}>{meta.label}</div>
+                <div style={{fontSize:10,color:"#3A4A5A",marginBottom:7}}>{meta.duration}</div>
+                <div style={{height:3,backgroundColor:"#243344",borderRadius:2,marginBottom:3}}>
+                  <div style={{height:"100%",borderRadius:2,backgroundColor:exDone===exCount?"#2ECC71":meta.color,width:`${exCount>0?(exDone/exCount)*100:0}%`,transition:"width 0.3s"}}/>
+                </div>
+                <div style={{fontSize:9,color:"#2A3A4A",marginBottom:6}}>{exDone}/{exCount}</div>
+                <button onClick={e=>{e.stopPropagation();setMovingSession(p=>p===sk?null:sk);}} style={{width:"100%",padding:"3px 0",borderRadius:3,border:`1px solid ${isMoving?"#C8A84B":"#2A3A4A"}`,backgroundColor:isMoving?"#16120A":"transparent",color:isMoving?"#C8A84B":"#2C3C4C",fontSize:9,cursor:"pointer"}}>
+                  {isMoving?"✕ cancel":"↕ move"}
+                </button>
+              </> : <div style={{fontSize:11,color:"#1E2D3D",fontStyle:"italic",textAlign:"center",paddingTop:10}}>{day==="fri"?"rest":movingSession?"place here":"—"}</div>}
+              {(day==="sat"||day==="sun")&&<IntensityPicker day={day} value={intensities[day]} onChange={(d,v)=>setIntensities({...intensities,[d]:v})}/>}
+            </div>
+          </div>;
+        })}
+      </div>
+      <div style={{padding:"10px 14px",borderRadius:8,backgroundColor:"#0D1620",border:"1px solid #141E2A",display:"flex",flexWrap:"wrap",gap:8}}>
+        {Object.entries(TYPE_COLORS).map(([type,color])=>(
+          <div key={type} style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:8,height:8,borderRadius:2,backgroundColor:color,flexShrink:0}}/>
+            <span style={{fontSize:10,color:"#2E3E4E"}}>{type}</span>
+          </div>
+        ))}
+      </div>
+    </div>;
+  }
+
+  function FlexProgressTab({ startDate, onSetStart, entries, onAddEntry, currentWeek }) {
+    const [form, setForm] = useState({});
+    const [showForm, setShowForm] = useState(false);
+    const today = new Date().toISOString().split("T")[0];
+    const metrics = DATA.flexibility.metrics;
+    const phases = DATA.flexibility.phases;
+
+    function submit() {
+      const hasVal = metrics.some(m => form[m.key] !== undefined && form[m.key] !== "");
+      if (!hasVal) return;
+      onAddEntry({ date: today, week: currentWeek||1, ...form });
+      setForm({});
+      setShowForm(false);
+    }
+
+    const lastEntry = entries[entries.length-1];
+    const nextCheckIn = entries.length === 0 ? "Now — log your baseline!" :
+      lastEntry.week >= (currentWeek||1) ? "Log again at your next phase change" : "You're due for a check-in";
+
+    return <div style={{padding:"0 14px 32px",maxWidth:920,margin:"0 auto"}}>
+      <div style={{backgroundColor:"#111C28",borderRadius:8,padding:"16px",marginBottom:16,border:"1px solid #1E2D3D"}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#C8A84B",marginBottom:10}}>PLAN START DATE</div>
+        {startDate ? (
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:14,color:"#E0EAF4",fontWeight:700}}>{fmtDate(startDate)}</div>
+              <div style={{fontSize:11,color:"#4A5A6A",marginTop:3}}>Week {currentWeek} of 8 · {phases[getFlexPhaseIdx(currentWeek)]} phase</div>
+            </div>
+            <button onClick={()=>onSetStart(null)} style={{padding:"4px 10px",backgroundColor:"transparent",border:"1px solid #2C3A4A",borderRadius:5,color:"#4A5A6A",fontSize:11,cursor:"pointer"}}>Reset</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{fontSize:11,color:"#6A7A8D",marginBottom:10}}>Set your start date once and the app will auto-calculate which week you're on.</div>
+            <input type="date" defaultValue={today} onChange={e=>onSetStart(e.target.value)} style={{padding:"8px 12px",backgroundColor:"#1C2B3A",border:"1px solid #2C3A4A",borderRadius:6,color:"#E0EAF4",fontSize:13,cursor:"pointer"}}/>
+          </div>
+        )}
+      </div>
+      {entries.length > 0 && (
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#C8A84B",marginBottom:10,letterSpacing:1}}>PROGRESS TOWARD GOALS</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+            {metrics.map(m=><MetricCard key={m.key} metric={m} entries={entries}/>)}
+          </div>
+        </div>
+      )}
+      <div style={{backgroundColor:"#111C28",borderRadius:8,padding:"16px",marginBottom:16,border:"1px solid #1E2D3D"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showForm?14:0}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:"#C8A84B"}}>{entries.length===0?"LOG BASELINE":"LOG ASSESSMENT"}</div>
+            <div style={{fontSize:11,color:"#4A5A6A",marginTop:2}}>{nextCheckIn}</div>
+          </div>
+          <button onClick={()=>setShowForm(p=>!p)} style={{padding:"7px 14px",backgroundColor:showForm?"transparent":"#C8A84B",border:`1px solid ${showForm?"#3A4A5A":"#C8A84B"}`,borderRadius:6,color:showForm?"#6A7A8D":"#111C28",fontSize:12,fontWeight:700,cursor:"pointer"}}>{showForm?"Cancel":"+ Log"}</button>
+        </div>
+        {showForm && (
+          <div>
+            <div style={{fontSize:11,color:"#4A5A6A",marginBottom:14,fontStyle:"italic"}}>Measure with a tape measure before your session. Only fill in what you've measured today.</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12,marginBottom:16}}>
+              {metrics.map(m=>(
+                <div key={m.key}>
+                  <div style={{fontSize:11,fontWeight:700,color:m.color,marginBottom:4}}>{m.label}</div>
+                  <div style={{fontSize:10,color:"#4A5A6A",marginBottom:6,lineHeight:1.4}}>{m.desc}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" placeholder="—" value={form[m.key]||""} onChange={e=>setForm(p=>({...p,[m.key]:e.target.value}))} style={{width:"100%",padding:"7px 10px",backgroundColor:"#1C2B3A",border:"1px solid #2C3A4A",borderRadius:6,color:"#E0EAF4",fontSize:13}}/>
+                    <span style={{fontSize:11,color:"#3A4A5A",whiteSpace:"nowrap"}}>{m.unit.split(" ")[0]}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={submit} style={{width:"100%",padding:"10px",backgroundColor:"#C8A84B",border:"none",borderRadius:6,color:"#111C28",fontSize:13,fontWeight:700,cursor:"pointer"}}>Save Assessment</button>
+          </div>
+        )}
+      </div>
+      {entries.length > 0 && (
+        <div style={{backgroundColor:"#111C28",borderRadius:8,border:"1px solid #1E2D3D",overflow:"hidden"}}>
+          <div style={{padding:"14px 16px",borderBottom:"1px solid #1E2D3D",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#C8A84B"}}>ASSESSMENT HISTORY</div>
+            {entries.length>=2&&<div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+              {metrics.map(m=>(
+                <div key={m.key} style={{textAlign:"center"}}>
+                  <div style={{fontSize:9,color:m.color,marginBottom:3}}>{m.label.split(" ")[0]}</div>
+                  <Sparkline entries={entries.filter(e=>e[m.key]!==undefined)} metricKey={m.key} color={m.color} direction={m.direction}/>
+                </div>
+              ))}
+            </div>}
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{backgroundColor:"#0D1620"}}>
+                <th style={{padding:"8px 14px",textAlign:"left",color:"#4A5A6A",fontWeight:600}}>Date</th>
+                <th style={{padding:"8px 14px",textAlign:"center",color:"#4A5A6A",fontWeight:600}}>Week</th>
+                {metrics.map(m=><th key={m.key} style={{padding:"8px 14px",textAlign:"center",color:m.color,fontWeight:600}}>{m.label.split(" ")[0]}</th>)}
+              </tr></thead>
+              <tbody>
+                {[...entries].reverse().map((entry,i)=>(
+                  <tr key={i} style={{borderTop:"1px solid #1A2535",backgroundColor:i%2===0?"#111C28":"#0E1820"}}>
+                    <td style={{padding:"9px 14px",color:"#8899AA"}}>{fmtDate(entry.date)}</td>
+                    <td style={{padding:"9px 14px",textAlign:"center",color:"#C8A84B",fontWeight:700}}>W{entry.week}</td>
+                    {metrics.map(m=><td key={m.key} style={{padding:"9px 14px",textAlign:"center",color:"#E0EAF4"}}>{entry[m.key]!==undefined&&entry[m.key]!==""?entry[m.key]:"—"}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  DEADLIFT COMPONENTS
+  // ══════════════════════════════════════════════════════════════════════════
+  function DLWorkoutModal({ weekData, cycleNum, week, completed, onToggle, onClose }) {
+    if (!weekData) return null;
+    const phaseLabel = `Phase ${weekData.phase}`;
+    const items = [];
+    if (weekData.isRest) {
+      items.push({ id:"rest", label:"Rest Week", desc:weekData.note, prescription:"—" });
+    } else if (weekData.isTest) {
+      weekData.warmup.forEach((w,i)=> items.push({ id:`test-${i}`, label:i===weekData.warmup.length-1?"Attempt: NEW MAX":`Attempt ${i+1}`, desc:i===0?"Warm-up":"Work up", prescription:`${w} lbs` }));
+    } else {
+      const mainParts = weekData.sets.split(",").map(s=>s.trim());
+      mainParts.forEach((part,i)=>{
+        const isBackoff = part.toLowerCase().includes("bo");
+        items.push({ id:`main-${i}`, label:isBackoff?`Back-off: ${part}`:`Main: ${part}`, desc:isBackoff?`@ ${weekData.backoff} lbs`:`@ ${weekData.weight} lbs`, prescription:isBackoff?`${weekData.backoff} lbs`:`${weekData.weight} lbs` });
+      });
+    }
+    if (weekData.sugAcc && weekData.sugAcc.length > 0) {
+      weekData.sugAcc.forEach((a,i)=> items.push({ id:`acc-${i}`, label:a, desc:"Accessory", prescription:"" }));
+    }
+    const total = items.length;
+    const done = items.filter(it=>completed.has(`dl-${cycleNum}-${week}-${it.id}`)).length;
+
+    return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+      <div style={{width:"min(700px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{backgroundColor:DL_COLOR,padding:"22px 24px 18px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.55)",letterSpacing:2,marginBottom:5}}>CYCLE {cycleNum} · WEEK {week} · {phaseLabel}</div>
+              <div style={{fontSize:21,fontWeight:800,color:"#fff",marginBottom:4}}>{weekData.isTest?"MAX TEST DAY":weekData.isRest?"Rest & Recovery":"Conventional Deadlift"}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.65)",lineHeight:1.4}}>{weekData.note}</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.12)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+          </div>
+          {!weekData.isRest && <div style={{marginTop:18}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.65)"}}>{done===total?"✓ Complete!":`${done} / ${total} items`}</span>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.65)"}}>RPE Target: {weekData.rpe}</span>
+            </div>
+            <Bar pct={(done/total)*100} color="rgba(255,255,255,0.5)"/>
+          </div>}
+          {weekData.deload&&<div style={{marginTop:10,padding:"6px 10px",borderRadius:4,backgroundColor:"rgba(255,255,255,0.1)",fontSize:11,color:"#FFD54F",fontWeight:700}}>DELOAD WEEK</div>}
+        </div>
+        {weekData.isTest&&<div style={{padding:"12px 18px",backgroundColor:"#1A0505",borderBottom:"1px solid #2D1111",fontSize:11,color:"#E57373",lineHeight:1.5}}>
+          Work up: {weekData.warmup.join(" → ")} lbs. Full rest between attempts (3–5 min). Stop when form breaks.
+        </div>}
+        <div>
+          {items.map((it,i)=>{
+            const key = `dl-${cycleNum}-${week}-${it.id}`;
+            const checked = completed.has(key);
+            return <div key={i} onClick={()=>onToggle(key)} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"13px 18px",backgroundColor:checked?"#081A10":(i%2===0?"#181F2A":"#1C2534"),borderLeft:`3px solid ${checked?"#2ECC71":"transparent"}`,cursor:"pointer"}}>
+              <div style={{width:18,height:18,borderRadius:3,flexShrink:0,marginTop:3,border:`2px solid ${checked?"#2ECC71":"#3A4A5A"}`,backgroundColor:checked?"#2ECC71":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {checked&&<span style={{color:"#081A10",fontSize:11,fontWeight:900}}>✓</span>}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                  <span style={{fontSize:14,fontWeight:700,color:checked?"#3A5A4A":"#E0EAF4",textDecoration:checked?"line-through":"none"}}>{it.label}</span>
+                  {it.prescription&&<span style={{fontSize:13,fontWeight:700,color:"#C8A84B"}}>{it.prescription}</span>}
+                </div>
+                <div style={{fontSize:11,color:"#5A6A7D"}}>{it.desc}</div>
+              </div>
+            </div>;
+          })}
+        </div>
+        {done===total&&total>0&&<div style={{padding:"16px 24px",backgroundColor:"#081A10",textAlign:"center",fontSize:14,fontWeight:700,color:"#2ECC71"}}>{weekData.isTest?"Test day done! Record your result below.":"Session complete. Nice pull."}</div>}
+      </div>
+    </div>;
+  }
+
+  function DLLogModal({ logs, onAddLog, currentCycle, currentWeek, onClose }) {
+    const [form, setForm] = useState({ weight:"", setsReps:"", rpe:"", notes:"" });
+    const today = new Date().toISOString().split("T")[0];
+    function submit() {
+      if (!form.weight && !form.notes) return;
+      onAddLog({ date:today, cycle:currentCycle, week:currentWeek, ...form });
+      setForm({ weight:"", setsReps:"", rpe:"", notes:"" });
+    }
+    return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+      <div style={{width:"min(700px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{backgroundColor:"#1C2B3A",padding:"20px 24px 16px",borderBottom:"1px solid #2A3A4A"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:DL_ACCENT,letterSpacing:2,marginBottom:4}}>DEADLIFT</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Training Log</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+        </div>
+        <div style={{padding:"16px 24px",borderBottom:"1px solid #1E2D3D"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#C8A84B",marginBottom:12}}>LOG SESSION</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <div style={{fontSize:10,color:"#4A5A6A",marginBottom:4}}>Top Weight (lbs)</div>
+              <input type="number" value={form.weight} onChange={e=>setForm(p=>({...p,weight:e.target.value}))} placeholder="e.g. 185" style={{width:"100%",padding:"8px 10px",backgroundColor:"#1C2B3A",border:"1px solid #2C3A4A",borderRadius:6,color:"#E0EAF4",fontSize:13}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:"#4A5A6A",marginBottom:4}}>Sets × Reps</div>
+              <input type="text" value={form.setsReps} onChange={e=>setForm(p=>({...p,setsReps:e.target.value}))} placeholder="e.g. 3×8" style={{width:"100%",padding:"8px 10px",backgroundColor:"#1C2B3A",border:"1px solid #2C3A4A",borderRadius:6,color:"#E0EAF4",fontSize:13}}/>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
+            <div>
+              <div style={{fontSize:10,color:"#4A5A6A",marginBottom:4}}>RPE</div>
+              <div style={{display:"flex",gap:3}}>
+                {["6","7","8","9","10"].map(r=>(
+                  <button key={r} onClick={()=>setForm(p=>({...p,rpe:p.rpe===r?"":r}))} style={{flex:1,padding:"6px 0",borderRadius:4,border:"1px solid",fontSize:12,fontWeight:700,cursor:"pointer",borderColor:form.rpe===r?DL_ACCENT:"#2C3A4A",backgroundColor:form.rpe===r?DL_COLOR:"transparent",color:form.rpe===r?"#fff":"#4A5A6A"}}>{r}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:"#4A5A6A",marginBottom:4}}>Notes</div>
+              <input type="text" value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="How did it feel?" style={{width:"100%",padding:"8px 10px",backgroundColor:"#1C2B3A",border:"1px solid #2C3A4A",borderRadius:6,color:"#E0EAF4",fontSize:13}}/>
+            </div>
+          </div>
+          <button onClick={submit} style={{width:"100%",padding:"10px",backgroundColor:DL_ACCENT,border:"none",borderRadius:6,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Save Entry</button>
+        </div>
+        <div style={{maxHeight:400,overflowY:"auto"}}>
+          {logs.length===0 ? (
+            <div style={{padding:"24px",textAlign:"center",color:"#3A4A5A",fontSize:12,fontStyle:"italic"}}>No entries yet.</div>
+          ) : (
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{backgroundColor:"#0D1620"}}>
+                <th style={{padding:"8px 14px",textAlign:"left",color:"#4A5A6A"}}>Date</th>
+                <th style={{padding:"8px 10px",textAlign:"center",color:"#4A5A6A"}}>C/W</th>
+                <th style={{padding:"8px 10px",textAlign:"center",color:"#4A5A6A"}}>Weight</th>
+                <th style={{padding:"8px 10px",textAlign:"center",color:"#4A5A6A"}}>S×R</th>
+                <th style={{padding:"8px 10px",textAlign:"center",color:"#4A5A6A"}}>RPE</th>
+                <th style={{padding:"8px 14px",textAlign:"left",color:"#4A5A6A"}}>Notes</th>
+              </tr></thead>
+              <tbody>
+                {[...logs].reverse().map((log,i)=>(
+                  <tr key={i} style={{borderTop:"1px solid #1A2535",backgroundColor:i%2===0?"#111C28":"#0E1820"}}>
+                    <td style={{padding:"8px 14px",color:"#8899AA"}}>{fmtDate(log.date)}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:DL_ACCENT,fontWeight:700}}>C{log.cycle}W{log.week}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:"#E0EAF4",fontWeight:700}}>{log.weight||"—"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:"#C8A84B"}}>{log.setsReps||"—"}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:"#E0EAF4"}}>{log.rpe||"—"}</td>
+                    <td style={{padding:"8px 14px",color:"#6A7A8D",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.notes||"—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>;
+  }
+
+  function DLAccessoryModal({ onClose }) {
+    const { accessoryLibrary, rpeScale } = DATA.deadlift;
+    return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+      <div style={{width:"min(640px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{backgroundColor:"#1C2B3A",padding:"20px 24px 16px",borderBottom:"1px solid #2A3A4A"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:DL_ACCENT,letterSpacing:2,marginBottom:4}}>REFERENCE</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Accessory Library</div>
+              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>Pick 2–3 per session. Prioritize climbing-friendly movements.</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+        </div>
+        <div style={{padding:"8px 0"}}>
+          {accessoryLibrary.map((acc,i)=>(
+            <div key={i} style={{padding:"12px 24px",backgroundColor:i%2===0?"#111C28":"#0E1720",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#E0EAF4",marginBottom:3}}>{acc.name}</div>
+                <div style={{fontSize:11,color:"#6A7A8D"}}>{acc.why}</div>
+              </div>
+              <div style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,backgroundColor:acc.climbFriendly?"#0D1A10":"#1A0F00",color:acc.climbFriendly?"#2ECC71":"#E67E22",border:`1px solid ${acc.climbFriendly?"#2ECC7133":"#E67E2233"}`,whiteSpace:"nowrap"}}>{acc.climbFriendly?"Climb-safe":"Grip caution"}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"16px 24px",borderTop:"1px solid #1E2D3D"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#C8A84B",marginBottom:8}}>RPE SCALE</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+            {rpeScale.map(r=>(
+              <div key={r.rpe} style={{padding:"8px",backgroundColor:"#0D1620",borderRadius:6,textAlign:"center",border:"1px solid #1E2D3D"}}>
+                <div style={{fontSize:16,fontWeight:800,color:DL_ACCENT,marginBottom:3}}>{r.rpe}</div>
+                <div style={{fontSize:9,color:"#5A6A7D",lineHeight:1.4}}>{r.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>;
+  }
+
+  function DeadliftTab({ dlStartDate, setDLStartDate, dlCycle, setDLCycle, dlCompleted, toggleDLExercise, dlLogs, addDLLog }) {
+    const [showWorkout, setShowWorkout] = useState(false);
+    const [showLog, setShowLog] = useState(false);
+    const [showAccessories, setShowAccessories] = useState(false);
+    const today = new Date().toISOString().split("T")[0];
+    const { phases: DL_PHASES, phaseDescs: DL_PHASE_DESCS, cycleMap: CYCLE_MAP } = DATA.deadlift;
+
+    const rawWeek = calcWeek(dlStartDate);
+    const totalWeek = rawWeek || 1;
+    const cycleIdx = Math.min(8, Math.floor((totalWeek - 1) / 8));
+    const weekInCycle = ((totalWeek - 1) % 8) + 1;
+    const currentCycle = dlCycle || (cycleIdx + 1);
+    const cycleInfo = CYCLE_MAP[currentCycle - 1] || CYCLE_MAP[0];
+    const weeks = generateCycleWeeks(cycleInfo.startMax);
+    const currentWeekData = weeks[weekInCycle - 1] || weeks[0];
+    const dlPhaseIdx = getDLPhaseIdx(weekInCycle);
+
+    return <div style={{maxWidth:920,margin:"0 auto",padding:"18px 14px"}}>
+      <div style={{marginBottom:14,padding:"10px 16px",borderRadius:8,backgroundColor:"#1A0505",border:"1px solid #2D1111",fontSize:11,color:"#E57373",lineHeight:1.5}}>
+        <strong>Scheduling rule:</strong> Deadlift on a climbing rest day or after an easy climbing day. Never before hard bouldering. Double overhand up to ~70%, then hook grip or mixed.
+      </div>
+      <div style={{backgroundColor:"#111C28",borderRadius:8,padding:"16px",marginBottom:14,border:"1px solid #1E2D3D"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:12,fontWeight:700,color:DL_ACCENT}}>DEADLIFT PROGRAM</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {CYCLE_MAP.map(c=>(
+              <button key={c.cycle} onClick={()=>setDLCycle(c.cycle)} style={{padding:"4px 8px",borderRadius:4,fontSize:10,fontWeight:700,cursor:"pointer",border:`1px solid ${currentCycle===c.cycle?DL_ACCENT:"#2C3A4A"}`,backgroundColor:currentCycle===c.cycle?DL_COLOR:"transparent",color:currentCycle===c.cycle?"#fff":"#4A5A6A"}}>C{c.cycle}</button>
+            ))}
+          </div>
+        </div>
+        {dlStartDate ? (
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:14,color:"#E0EAF4",fontWeight:700}}>Cycle {currentCycle} · Week {weekInCycle} of 8</div>
+              <div style={{fontSize:11,color:"#4A5A6A",marginTop:3}}>Est. 1RM: {cycleInfo.startMax} lbs → Target: {cycleInfo.targetMax} lbs · {cycleInfo.pctGoal}% of 340</div>
+            </div>
+            <button onClick={()=>setDLStartDate(null)} style={{padding:"4px 10px",backgroundColor:"transparent",border:"1px solid #2C3A4A",borderRadius:5,color:"#4A5A6A",fontSize:11,cursor:"pointer"}}>Reset</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{fontSize:11,color:"#6A7A8D",marginBottom:10}}>Set your cycle start date to auto-track which week you're on.</div>
+            <input type="date" defaultValue={today} onChange={e=>setDLStartDate(e.target.value)} style={{padding:"8px 12px",backgroundColor:"#1C2B3A",border:"1px solid #2C3A4A",borderRadius:6,color:"#E0EAF4",fontSize:13,cursor:"pointer"}}/>
+          </div>
+        )}
+      </div>
+      <div style={{marginBottom:14}}>
+        <PhaseBar phases={DL_PHASES} activeIdx={dlPhaseIdx} color={DL_ACCENT}/>
+        <div style={{fontSize:10,color:"#5A6A7D",fontStyle:"italic",marginTop:2}}>{DL_PHASE_DESCS[dlPhaseIdx]}</div>
+      </div>
+      <div onClick={()=>setShowWorkout(true)} style={{marginBottom:14,padding:"16px 18px",borderRadius:8,cursor:"pointer",backgroundColor:"#111C28",border:`1px solid ${DL_COLOR}55`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:DL_ACCENT,letterSpacing:1,marginBottom:4}}>WEEK {weekInCycle} — {currentWeekData.isTest?"MAX TEST":currentWeekData.isRest?"REST WEEK":"WORKOUT"}</div>
+            <div style={{fontSize:16,fontWeight:800,color:"#E0EAF4"}}>{currentWeekData.isRest?"No Deadlifts":currentWeekData.isTest?"Test Day":"Conventional Deadlift"}</div>
+          </div>
+          <span style={{fontSize:11,color:"#2C3A4A"}}>open ›</span>
+        </div>
+        {!currentWeekData.isRest && (
+          <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+            <div><div style={{fontSize:10,color:"#4A5A6A"}}>Prescription</div><div style={{fontSize:14,fontWeight:700,color:"#C8A84B"}}>{currentWeekData.sets}</div></div>
+            {currentWeekData.weight && <div><div style={{fontSize:10,color:"#4A5A6A"}}>Weight</div><div style={{fontSize:14,fontWeight:700,color:"#E0EAF4"}}>{currentWeekData.weight} lbs{currentWeekData.backoff?` / ${currentWeekData.backoff} BO`:""}</div></div>}
+            <div><div style={{fontSize:10,color:"#4A5A6A"}}>RPE Target</div><div style={{fontSize:14,fontWeight:700,color:DL_ACCENT}}>{currentWeekData.rpe}</div></div>
+          </div>
+        )}
+        {currentWeekData.deload&&<div style={{marginTop:8,padding:"4px 8px",borderRadius:4,backgroundColor:"#1A1A00",border:"1px solid #FFD54F33",fontSize:10,fontWeight:700,color:"#FFD54F",display:"inline-block"}}>DELOAD</div>}
+      </div>
+      <div style={{backgroundColor:"#111C28",borderRadius:8,padding:"16px",marginBottom:14,border:"1px solid #1E2D3D"}}>
+        <div style={{fontSize:12,fontWeight:700,color:DL_ACCENT,marginBottom:12,letterSpacing:1}}>CYCLE {currentCycle} OVERVIEW</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:4}}>
+          {weeks.map((w,i)=>{
+            const isCurrent = weekInCycle === w.week;
+            const isPast = weekInCycle > w.week;
+            const phColor = w.phase==="A"?"#1565C0":w.phase==="B"?"#E65100":w.phase==="C"?DL_COLOR:"#4A5A6A";
+            return <div key={i} style={{padding:"8px 4px",borderRadius:6,textAlign:"center",backgroundColor:isCurrent?phColor+"22":"#0D1620",border:`1px solid ${isCurrent?phColor:"#1A2535"}`,opacity:isPast?0.5:1}}>
+              <div style={{fontSize:9,fontWeight:700,color:isCurrent?phColor:"#3A4A5A"}}>W{w.week}</div>
+              <div style={{fontSize:10,fontWeight:700,color:isCurrent?"#E0EAF4":"#4A5A6A",marginTop:2}}>{w.isRest?"—":w.isTest?"TEST":w.weight?`${w.weight}`:"—"}</div>
+              <div style={{fontSize:8,color:"#3A4A5A",marginTop:1}}>{w.sets.split(",")[0]}</div>
+            </div>;
+          })}
+        </div>
+      </div>
+      <div style={{backgroundColor:"#111C28",borderRadius:8,padding:"16px",marginBottom:14,border:"1px solid #1E2D3D"}}>
+        <div style={{fontSize:12,fontWeight:700,color:DL_ACCENT,marginBottom:12,letterSpacing:1}}>LONG-TERM PROGRESSION: 215 → 340 (9 cycles × 8 wks)</div>
+        {CYCLE_MAP.map(c=>{
+          const isCurrent = currentCycle === c.cycle;
+          const isPast = currentCycle > c.cycle;
+          return <div key={c.cycle} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",marginBottom:4,borderRadius:6,backgroundColor:isCurrent?"#1A0505":"transparent",border:`1px solid ${isCurrent?DL_COLOR+"55":"transparent"}`,opacity:isPast?0.5:1}}>
+            <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,backgroundColor:isCurrent?DL_COLOR:isPast?"#2ECC71":"#1E2D3D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff"}}>{isPast?"✓":c.cycle}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:isCurrent?"#E0EAF4":"#6A7A8D"}}>Cycle {c.cycle}: {c.startMax} → {c.targetMax} lbs</div>
+              <div style={{fontSize:10,color:"#4A5A6A"}}>{c.notes}</div>
+            </div>
+            <div style={{textAlign:"right",minWidth:80}}>
+              <Bar pct={c.pctGoal} color={isCurrent?DL_ACCENT:"#3A4A5A"} height={4}/>
+              <div style={{fontSize:9,color:"#3A4A5A",marginTop:3}}>{c.pctGoal}% of 340</div>
+            </div>
+          </div>;
+        })}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <button onClick={()=>setShowLog(true)} style={{padding:"14px",borderRadius:8,border:`1px solid ${DL_COLOR}55`,backgroundColor:"#111C28",cursor:"pointer",textAlign:"center"}}>
+          <div style={{fontSize:12,fontWeight:700,color:DL_ACCENT}}>Training Log</div>
+          <div style={{fontSize:10,color:"#4A5A6A",marginTop:3}}>{dlLogs.length} entries</div>
+        </button>
+        <button onClick={()=>setShowAccessories(true)} style={{padding:"14px",borderRadius:8,border:"1px solid #1E2D3D",backgroundColor:"#111C28",cursor:"pointer",textAlign:"center"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#C8A84B"}}>Accessories & RPE</div>
+          <div style={{fontSize:10,color:"#4A5A6A",marginTop:3}}>Reference guide</div>
+        </button>
+      </div>
+      {showWorkout&&<DLWorkoutModal weekData={currentWeekData} cycleNum={currentCycle} week={weekInCycle} completed={dlCompleted} onToggle={toggleDLExercise} onClose={()=>setShowWorkout(false)}/>}
+      {showLog&&<DLLogModal logs={dlLogs} onAddLog={addDLLog} currentCycle={currentCycle} currentWeek={weekInCycle} onClose={()=>setShowLog(false)}/>}
+      {showAccessories&&<DLAccessoryModal onClose={()=>setShowAccessories(false)}/>}
+    </div>;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  MAIN APP
+  // ══════════════════════════════════════════════════════════════════════════
+  function App() {
+    const { flexibility: FL, deadlift: DL } = DATA;
+    const PHASES = FL.phases;
+
+    const [section,       setSection]       = useState(()=>load("section","flex"));
+    const [flexStart,     setFlexStartRaw]  = useState(()=>load("flexStart",null));
+    const [schedule,      setScheduleRaw]   = useState(()=>load("schedule", FL.defaultSchedule));
+    const [flexCompleted, setFlexCompletedRaw] = useState(()=>new Set(load("flexCompleted",[])));
+    const [intensities,   setIntensitiesRaw] = useState(()=>load("intensities",{}));
+    const [assessments,   setAssessmentsRaw] = useState(()=>load("assessments",[]));
+    const [flexTab,       setFlexTab]       = useState("plan");
+    const [activeSession, setActiveSession] = useState(null);
+    const [showMorning,   setShowMorning]   = useState(false);
+    const [viewWeek,      setViewWeek]      = useState(null);
+    const [dlStart,       setDLStartRaw]    = useState(()=>load("dlStart",null));
+    const [dlCycle,       setDLCycleRaw]    = useState(()=>load("dlCycle",1));
+    const [dlCompleted,   setDLCompletedRaw] = useState(()=>new Set(load("dlCompleted",[])));
+    const [dlLogs,        setDLLogsRaw]     = useState(()=>load("dlLogs",[]));
+
+    const flexWeek = Math.min(8, calcWeek(flexStart) || 1);
+
+    useEffect(() => {
+      const migrated = load("flexCompletedMigrated", false);
+      if (migrated) return;
+      const raw = load("flexCompleted", []);
+      const SESSION_KEYS = Object.keys(FL.sessions);
+      const needsMigration = raw.some(id => SESSION_KEYS.some(sk => id.startsWith(`${sk}-`) && !id.startsWith("w")));
+      if (needsMigration) {
+        const week = Math.min(8, calcWeek(load("flexStart", null)) || 1);
+        const rekeyed = raw.map(id => {
+          const matchedKey = SESSION_KEYS.find(sk => id.startsWith(`${sk}-`) && !id.startsWith("w"));
+          return matchedKey ? `w${week}-${id}` : id;
+        });
+        save("flexCompleted", rekeyed);
+        setFlexCompletedRaw(new Set(rekeyed));
+      }
+      save("flexCompletedMigrated", true);
+    }, []);
+
+    useEffect(() => {
+      const seeded = load("flexWeekSeedDone", false);
+      if (seeded) return;
+      const SESSION_COUNTS = Object.fromEntries(Object.entries(FL.sessions).map(([k,v])=>[k,v.exercises.length]));
+      const existing = load("flexCompleted", []);
+      const base = existing.filter(id => !id.match(/^w[123]-/));
+      const seededKeys = [];
+      for (const [sk, count] of Object.entries(SESSION_COUNTS)) {
+        for (let i = 0; i < count; i++) {
+          seededKeys.push(`w1-${sk}-${i}`);
+          seededKeys.push(`w2-${sk}-${i}`);
+        }
+      }
+      const final = [...new Set([...base, ...seededKeys])];
+      save("flexCompleted", final);
+      setFlexCompletedRaw(new Set(final));
+      save("flexWeekSeedDone", true);
+    }, []);
+
+    function setFlexStart(d)    { setFlexStartRaw(d);  save("flexStart",d); }
+    function setSchedule(v)     { setScheduleRaw(v);   save("schedule",v); }
+    function setFlexCompleted(fn) { setFlexCompletedRaw(prev=>{ const n=fn(prev); save("flexCompleted",[...n]); return n; }); }
+    function setIntensities(v)  { setIntensitiesRaw(v); save("intensities",v); }
+    function addAssessment(e)   { setAssessmentsRaw(p=>{ const n=[...p,e]; save("assessments",n); return n; }); }
+    function toggleFlexExercise(id) { setFlexCompleted(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; }); }
+    function setDLStart(d)      { setDLStartRaw(d);    save("dlStart",d); }
+    function setDLCycle(c)      { setDLCycleRaw(c);    save("dlCycle",c); }
+    function setDLCompleted(fn) { setDLCompletedRaw(prev=>{ const n=fn(prev); save("dlCompleted",[...n]); return n; }); }
+    function toggleDLExercise(id) { setDLCompleted(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; }); }
+    function addDLLog(entry)    { setDLLogsRaw(p=>{ const n=[...p,entry]; save("dlLogs",n); return n; }); }
+    function setTopSection(s)   { setSection(s); save("section",s); }
+
+    const flexPhaseIdx = getFlexPhaseIdx(flexWeek);
+    const sectionBtn = (s) => ({padding:"9px 24px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,backgroundColor:section===s?(s==="flex"?"#C8A84B":DL_ACCENT):"transparent",color:section===s?"#111C28":"#4A5A6A",transition:"all 0.15s"});
+    const flexSubBtn = (t) => ({padding:"7px 16px",borderRadius:5,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,backgroundColor:flexTab===t?"#C8A84B":"transparent",color:flexTab===t?"#111C28":"#4A5A6A",transition:"all 0.15s"});
+
+    return <div style={{minHeight:"100vh",backgroundColor:"#0B131C",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif",color:"#E0EAF4"}}>
+      <div style={{backgroundColor:"#111C28",borderBottom:"1px solid #1E2D3D",padding:"14px 18px",position:"sticky",top:0,zIndex:10}}>
+        <div style={{maxWidth:920,margin:"0 auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:800,letterSpacing:"-0.3px"}}>Jon's Training Hub</div>
+              <div style={{fontSize:11,color:"#4A5A6A"}}>Climbing · Flexibility · Strength</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              {section==="flex" && flexStart ? (
+                <><div style={{fontSize:13,fontWeight:800,color:"#C8A84B"}}>Flex: Week {flexWeek} / 8</div><div style={{fontSize:10,color:"#4A5A6A"}}>{PHASES[flexPhaseIdx]} phase</div></>
+              ) : section==="dl" && dlStart ? (
+                <><div style={{fontSize:13,fontWeight:800,color:DL_ACCENT}}>DL: Cycle {dlCycle}</div><div style={{fontSize:10,color:"#4A5A6A"}}>{DL.cycleMap[(dlCycle||1)-1]?.startMax} → {DL.cycleMap[(dlCycle||1)-1]?.targetMax} lbs</div></>
+              ) : (
+                <div style={{fontSize:11,color:"#3A4A5A",fontStyle:"italic"}}>Set start date →</div>
+              )}
+            </div>
+          </div>
+          {section==="flex" && <PhaseBar phases={PHASES} activeIdx={flexPhaseIdx}/>}
+          {section==="dl" && dlStart && <PhaseBar phases={DL.phases} activeIdx={getDLPhaseIdx(((calcWeek(dlStart)||1)-1)%8+1)} color={DL_ACCENT}/>}
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:4,backgroundColor:"#0D1620",padding:4,borderRadius:8}}>
+              <button style={sectionBtn("flex")} onClick={()=>setTopSection("flex")}>🧘 Flexibility</button>
+              <button style={sectionBtn("dl")} onClick={()=>setTopSection("dl")}>🏋️ Deadlift</button>
+            </div>
+            {section==="flex" && (
+              <div style={{display:"flex",gap:4,backgroundColor:"#0D1620",padding:3,borderRadius:6,marginLeft:8}}>
+                <button style={flexSubBtn("plan")} onClick={()=>setFlexTab("plan")}>📅 Plan</button>
+                <button style={flexSubBtn("progress")} onClick={()=>setFlexTab("progress")}>📈 Progress</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {section==="flex" && flexTab==="plan" && <FlexPlanTab schedule={schedule} setSchedule={setSchedule} completed={flexCompleted} toggleExercise={toggleFlexExercise} intensities={intensities} setIntensities={setIntensities} currentWeek={flexWeek} setActiveSession={setActiveSession} showMorning={showMorning} setShowMorning={setShowMorning} viewWeek={viewWeek||flexWeek} onViewWeekChange={setViewWeek}/>}
+      {section==="flex" && flexTab==="progress" && <FlexProgressTab startDate={flexStart} onSetStart={setFlexStart} entries={assessments} onAddEntry={addAssessment} currentWeek={flexWeek}/>}
+      {section==="dl" && <DeadliftTab dlStartDate={dlStart} setDLStartDate={setDLStart} dlCycle={dlCycle} setDLCycle={setDLCycle} dlCompleted={dlCompleted} toggleDLExercise={toggleDLExercise} dlLogs={dlLogs} addDLLog={addDLLog}/>}
+      {activeSession&&<SessionModal sessionKey={activeSession.key} week={activeSession.week} completed={flexCompleted} onToggle={toggleFlexExercise} onClose={()=>setActiveSession(null)}/>}
+      {showMorning&&<MorningModal onClose={()=>setShowMorning(false)}/>}
+    </div>;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  BOOT — fetch data then render
+  // ══════════════════════════════════════════════════════════════════════════
+  fetch("training-data.json")
+    .then(r => r.json())
+    .then(data => {
+      DATA = data;
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      ReactDOM.createRoot(document.getElementById("app")).render(<App/>);
+    })
+    .catch(err => {
+      document.getElementById("loading").textContent = "Failed to load training data. Make sure training-data.json is in the same folder.";
+      console.error(err);
+    });
+  </script>
+
+  <!-- PWA Service Worker registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
