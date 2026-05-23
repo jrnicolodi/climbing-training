@@ -109,6 +109,142 @@
       { "title": "Upper Body & Thoracic", "dur": "~8 min",  "exs": ["Thread the Needle · 25s × 3/side", "Behind the Back IR · 30s × 2/side", "Arch Lat Stretch · 30s × 3/side"] },
       { "title": "Split Practice",        "dur": "~10 min", "exs": ["Hip Flexor Lunge, Tempo · 8s × 6r × 2/side", "Standing Hip Flexor Iso · 30s × 2/side", "Front Split · 45s × 3 (+ 10 overhead reaches/hold)"] },
       { "title": "Integration",           "dur": "~4 min",  "exs": ["Hip IR with hands · 30s (massage gun)", "Hip IR without hands · 30s active control"] }
+    ],
+    "morningV2": {
+      "version": 2,
+      "intro": "Daily 45 min = Core Repeat (20m) + Today's Focus (20m, rotates) + Cool-down (5m). Goals: full split, hip strength + knee-to-chest, frog knees to floor.",
+      "coreRepeat": {
+        "title": "Core Repeat",
+        "dur": "~20 min",
+        "subtitle": "Same every day — the habit",
+        "exs": [
+          "Cat-Cow · 10r × 2",
+          "Hip CARs · 5r × 2/side",
+          "Shoulder CARs · 5r × 1/side",
+          "World's Greatest Stretch · 5r × 2/side",
+          "90/90 Active Switches · 8 switches × 2",
+          "Frog Stretch (easy) · 60s × 2",
+          "Couch Stretch · 45s × 2/side",
+          "Standing Forward Fold + Roll-up · 3 slow reps",
+          "Deep Squat Hold · 60s"
+        ]
+      },
+      "focusCycle": [
+        {
+          "id": "split",
+          "title": "Split Focus",
+          "dur": "~20 min",
+          "color": "#2C3B4A",
+          "days": ["Mon", "Thu", "Sun"],
+          "exs": [
+            "Hip Flexor Lunge, Tempo · 8s × 6r × 2/side",
+            "Standing Hip Flexor Iso · 30s × 2/side",
+            "Half-Split Hover (rear knee down) · 30s × 3/side",
+            "Front Split (assisted, blocks) · 45s × 3/side",
+            "Hamstring PNF (lying, strap) · 6s push / 20s relax × 3/side"
+          ]
+        },
+        {
+          "id": "hipknee",
+          "title": "Hip Strength + Knee-to-Chest",
+          "dur": "~20 min",
+          "color": "#1E6091",
+          "days": ["Tue", "Fri"],
+          "exs": [
+            "Standing Knee Hug, Active · 5s squeeze × 6r × 2/side",
+            "Jefferson Curl (light DB 10–20 lbs) · 8r × 2",
+            "Hanging Knee Raise (or lying) · 8r × 3",
+            "Cossack Squat, Tempo · 8s × 6r × 2/side",
+            "High Step-Up · 6r × 3/side (RIGHT priority — Morpho Combat)",
+            "Seated Compression (knee to chest, active) · 30s × 2/side"
+          ]
+        },
+        {
+          "id": "frog",
+          "title": "Frog / External Rotation",
+          "dur": "~20 min",
+          "color": "#E65100",
+          "days": ["Wed", "Sat"],
+          "exs": [
+            "Tailor's Pose (Butterfly), Active · 30s + 10 press reps × 3",
+            "Frog Stretch, Loaded · 60s × 3",
+            "Frog PNF (contract-relax) · 6s push + 20s sink × 3",
+            "90/90 with Forward Fold · 45s × 2/side",
+            "Pancake Forward Fold (assisted) · 60s × 3",
+            "Lying Knee Drops (windshield wipers) · 10 slow reps × 2"
+          ]
+        }
+      ],
+      "coolDown": {
+        "title": "Cool-down",
+        "dur": "~5 min",
+        "subtitle": "Same every day",
+        "exs": [
+          "Child's Pose, breath · 60s",
+          "Supine Twist · 45s/side",
+          "Legs-up-wall · 90s"
+        ]
+      }
+    },
+    "floaterSessions": [
+      {
+        "id": "deepSplit",
+        "title": "Deep Split",
+        "dur": "25–30 min",
+        "bestDay": "Mon",
+        "goal": "Front split depth",
+        "color": "#2C3B4A",
+        "exs": [
+          "Warm-up: easy hip flow (cat-cow, lunges, 90/90) · 5 min",
+          "Couch stretch (wall version if possible) · 90s × 3/side",
+          "Half-split hold, active reach · 60s × 3/side",
+          "Front split, full · 90s × 3/side (blocks as needed)",
+          "Hamstring PNF lying · 3 cycles/side (6s contract, 20s deeper)",
+          "Pigeon, deep · 90s × 2/side",
+          "Cool: legs up wall · 3 min"
+        ]
+      },
+      {
+        "id": "deepFrog",
+        "title": "Deep Frog + Pancake",
+        "dur": "25–30 min",
+        "bestDay": "Wed",
+        "goal": "Frog knees to floor · +30cm pancake",
+        "color": "#E65100",
+        "exs": [
+          "Warm-up: hip CARs, 90/90, easy butterfly · 5 min",
+          "Frog PNF · 4 cycles (6s push up, 30s sink)",
+          "Frog loaded hold · 90s × 3",
+          "Butterfly PNF · 4 cycles/side (knees press up, then relax to floor)",
+          "Wide straddle seated fold (pancake) · 90s × 3",
+          "Side-to-side pancake reach · 30s/side × 3",
+          "Cossack squat, slow · 6r × 3/side",
+          "Cool: child's pose · 2 min"
+        ]
+      },
+      {
+        "id": "hipStrength",
+        "title": "Hip Strength + Loading",
+        "dur": "25–30 min",
+        "bestDay": "Fri (wild card)",
+        "goal": "Strength to hold new ranges + knee-to-chest",
+        "color": "#1E6091",
+        "exs": [
+          "Warm-up: World's Greatest Stretch + leg swings · 5 min",
+          "Jefferson curl, loaded · 20–30 lbs × 8r × 3",
+          "Single-leg RDL (DB) · 8r × 3/side",
+          "Cossack squat, loaded (KB front rack or DB) · 6r × 3/side",
+          "Hanging knee raise · AMRAP × 3 (strict)",
+          "High step-up, weighted · 6r × 3/side (RIGHT priority)",
+          "Copenhagen plank · 20s × 3/side"
+        ]
+      }
+    ],
+    "morningRules": [
+      "Daily is non-negotiable. Floaters are bonus — daily alone still progresses you.",
+      "Frog gets daily exposure (Core Repeat) plus 2 focused hits/week. Frequency > intensity for frog.",
+      "No PNF on climbing-day mornings — save contract-relax for floaters or rest-day mornings.",
+      "One missed day doesn't matter. The pattern matters."
     ]
   },
   "deadlift": {

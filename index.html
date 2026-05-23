@@ -193,29 +193,106 @@
     </div>;
   }
 
+  // Pick today's focus block by day-of-week from morningV2.focusCycle
+  function getTodayFocusFromData() {
+    const v2 = DATA.flexibility.morningV2;
+    if (!v2) return null;
+    const dayName = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+    return v2.focusCycle.find(f => f.days.includes(dayName)) || v2.focusCycle[0];
+  }
+
   function MorningModal({ onClose }) {
-    const blocks = DATA.flexibility.morningBlocks;
+    const v2 = DATA.flexibility.morningV2;
+    const [overrideFocus, setOverrideFocus] = useState(null);
+    // Fallback to old morningBlocks if v2 missing for any reason
+    if (!v2) {
+      const blocks = DATA.flexibility.morningBlocks;
+      return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+        <div style={{width:"min(640px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+          <div style={{padding:"16px 24px"}}>
+            {blocks.map((block,bi)=>(<div key={bi} style={{marginBottom:16}}><div style={{fontSize:13,fontWeight:700,color:"#C8A84B",marginBottom:6}}>{block.title} <span style={{fontSize:10,color:"#4A5A6A"}}>{block.dur}</span></div>{block.exs.map((ex,ei)=><div key={ei} style={{fontSize:12,color:"#8899AA"}}>· {ex}</div>)}</div>))}
+            <button onClick={onClose}>close</button>
+          </div>
+        </div>
+      </div>;
+    }
+    const todayFocus = overrideFocus || getTodayFocusFromData();
+    const dayName = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()];
+    const renderBlock = (block, accentColor) => (
+      <div style={{marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,alignItems:"baseline"}}>
+          <span style={{fontSize:13,fontWeight:700,color:accentColor || "#C8A84B"}}>{block.title}</span>
+          <span style={{fontSize:11,color:"#4A5A6A"}}>{block.dur}</span>
+        </div>
+        {block.subtitle && <div style={{fontSize:10,color:"#4A5A6A",marginBottom:6,fontStyle:"italic"}}>{block.subtitle}</div>}
+        <div style={{paddingLeft:12,borderLeft:`2px solid ${accentColor || "#2A3A4A"}55`}}>
+          {block.exs.map((ex,ei)=><div key={ei} style={{fontSize:12,color:"#8899AA",padding:"3px 0"}}>· {ex}</div>)}
+        </div>
+      </div>
+    );
     return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
       <div style={{width:"min(640px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
         <div style={{backgroundColor:"#1C2B3A",padding:"20px 24px 16px",borderBottom:"1px solid #2A3A4A"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:10,fontWeight:700,color:"#C8A84B",letterSpacing:2,marginBottom:4}}>DAILY</div>
-              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Morning Mobility Ritual</div>
-              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>~45 min · every day · the foundation</div>
+              <div style={{fontSize:10,fontWeight:700,color:"#C8A84B",letterSpacing:2,marginBottom:4}}>DAILY · {dayName.toUpperCase()}</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Morning Routine</div>
+              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>~45 min · Core (20) + Focus (20) + Cool-down (5)</div>
             </div>
             <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
         </div>
         <div style={{padding:"16px 24px"}}>
-          {blocks.map((block,bi)=>(
-            <div key={bi} style={{marginBottom:16}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                <span style={{fontSize:13,fontWeight:700,color:"#C8A84B"}}>{block.title}</span>
-                <span style={{fontSize:11,color:"#4A5A6A"}}>{block.dur}</span>
+          <div style={{marginBottom:16,padding:"10px 12px",backgroundColor:"#111C28",borderRadius:8,border:"1px solid #1E2D3D"}}>
+            <div style={{fontSize:10,color:"#4A5A6A",letterSpacing:1.5,marginBottom:6}}>TODAY'S FOCUS</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {v2.focusCycle.map(f=>{
+                const isActive = f.id === todayFocus.id;
+                return <button key={f.id} onClick={()=>setOverrideFocus(f)} style={{flex:"1 1 auto",padding:"7px 10px",borderRadius:6,border:isActive?`1px solid ${f.color}`:"1px solid #1E2D3D",backgroundColor:isActive?`${f.color}33`:"transparent",color:isActive?"#E0EAF4":"#6A7A8D",fontSize:11,fontWeight:isActive?700:500,cursor:"pointer"}}>
+                  {f.title.split(" ")[0]}
+                  <div style={{fontSize:9,color:"#4A5A6A",marginTop:2,fontWeight:400}}>{f.days.join("·")}</div>
+                </button>;
+              })}
+            </div>
+          </div>
+          {renderBlock(v2.coreRepeat, "#C8A84B")}
+          <div style={{marginTop:18,marginBottom:18,height:1,background:"linear-gradient(90deg,transparent,#2A3A4A,transparent)"}}/>
+          {renderBlock(todayFocus, todayFocus.color)}
+          <div style={{marginTop:18,marginBottom:18,height:1,background:"linear-gradient(90deg,transparent,#2A3A4A,transparent)"}}/>
+          {renderBlock(v2.coolDown, "#6A7A8D")}
+          {DATA.flexibility.morningRules && <div style={{marginTop:18,padding:"10px 12px",backgroundColor:"#0A1320",borderRadius:8,border:"1px solid #1A2530"}}>
+            <div style={{fontSize:10,color:"#4A5A6A",letterSpacing:1.5,marginBottom:6}}>RULES</div>
+            {DATA.flexibility.morningRules.map((r,i)=><div key={i} style={{fontSize:11,color:"#6A7A8D",padding:"3px 0"}}>· {r}</div>)}
+          </div>}
+        </div>
+      </div>
+    </div>;
+  }
+
+  function FloaterModal({ onClose }) {
+    const sessions = DATA.flexibility.floaterSessions || [];
+    return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,zIndex:50,backgroundColor:"rgba(0,0,0,0.85)",display:"flex",alignItems:"flex-start",justifyContent:"center",overflowY:"auto",padding:"24px 8px",WebkitOverflowScrolling:"touch"}}>
+      <div style={{width:"min(640px,96vw)",backgroundColor:"#0E1720",borderRadius:12,overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{backgroundColor:"#1C2B3A",padding:"20px 24px 16px",borderBottom:"1px solid #2A3A4A"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"#C8A84B",letterSpacing:2,marginBottom:4}}>OPTIONAL</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Floating Sessions</div>
+              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>25–30 min · where real range gains come from · skip when busy</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+        </div>
+        <div style={{padding:"16px 24px"}}>
+          {sessions.map((s,si)=>(
+            <div key={si} style={{marginBottom:18,padding:"14px 14px",backgroundColor:"#111C28",borderRadius:8,border:`1px solid ${s.color}55`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+                <span style={{fontSize:14,fontWeight:800,color:s.color}}>{s.title}</span>
+                <span style={{fontSize:11,color:"#4A5A6A"}}>{s.dur}</span>
               </div>
-              <div style={{paddingLeft:12,borderLeft:"2px solid #2A3A4A"}}>
-                {block.exs.map((ex,ei)=><div key={ei} style={{fontSize:12,color:"#8899AA",padding:"3px 0"}}>· {ex}</div>)}
+              <div style={{fontSize:10,color:"#6A7A8D",letterSpacing:1,marginBottom:4}}>BEST: {s.bestDay.toUpperCase()} · GOAL: {s.goal}</div>
+              <div style={{paddingLeft:10,borderLeft:`2px solid ${s.color}55`,marginTop:8}}>
+                {s.exs.map((ex,ei)=><div key={ei} style={{fontSize:12,color:"#8899AA",padding:"3px 0"}}>· {ex}</div>)}
               </div>
             </div>
           ))}
@@ -274,7 +351,7 @@
     </div>;
   }
 
-  function FlexPlanTab({ schedule, setSchedule, completed, toggleExercise, intensities, setIntensities, currentWeek, setActiveSession, showMorning, setShowMorning, onViewWeekChange, viewWeek }) {
+  function FlexPlanTab({ schedule, setSchedule, completed, toggleExercise, intensities, setIntensities, currentWeek, setActiveSession, showMorning, setShowMorning, showFloater, setShowFloater, onViewWeekChange, viewWeek }) {
     const [movingSession, setMovingSession] = useState(null);
     const activeWeek = viewWeek || currentWeek;
     const sessions = DATA.flexibility.sessions;
@@ -310,49 +387,49 @@
       </div>
       {activeWeek!==currentWeek&&<div style={{marginBottom:12,padding:"8px 12px",borderRadius:6,backgroundColor:"#12100A",border:"1px solid #2A2010",fontSize:11,color:"#C8A84B88"}}>Viewing Week {activeWeek} — checks here won't affect your current week ({currentWeek})</div>}
       {movingSession&&<div style={{marginBottom:14,padding:"10px 14px",borderRadius:7,backgroundColor:"#16120A",borderLeft:"3px solid #C8A84B",fontSize:12,color:"#C8A84B"}}>Moving <strong>Session {movingSession}</strong> — tap a day to place it · <span style={{textDecoration:"underline",cursor:"pointer"}} onClick={()=>setMovingSession(null)}>cancel</span></div>}
-      <div onClick={()=>setShowMorning(true)} style={{marginBottom:14,padding:"11px 16px",borderRadius:8,backgroundColor:"#111C28",border:"1px solid #1E2D3D",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
-        <span style={{fontSize:20}}>🌅</span>
-        <div style={{flex:1}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#C8A84B"}}>Morning Ritual</span>
-          <span style={{fontSize:11,color:"#4A5A6A"}}> · ~45 min · every day</span>
+      <div style={{marginBottom:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <div onClick={()=>setShowMorning(true)} style={{padding:"11px 14px",borderRadius:8,backgroundColor:"#111C28",border:"1px solid #1E2D3D",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+          <span style={{fontSize:20}}>🌅</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#C8A84B"}}>Morning Routine</div>
+            <div style={{fontSize:10,color:"#4A5A6A"}}>~45 min · daily</div>
+          </div>
+          <span style={{fontSize:11,color:"#2C3A4A"}}>›</span>
         </div>
-        <span style={{fontSize:11,color:"#2C3A4A"}}>view ›</span>
+        <div onClick={()=>setShowFloater&&setShowFloater(true)} style={{padding:"11px 14px",borderRadius:8,backgroundColor:"#111C28",border:"1px solid #1E2D3D",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+          <span style={{fontSize:20}}>✨</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#6FA8DC"}}>Floaters</div>
+            <div style={{fontSize:10,color:"#4A5A6A"}}>25–30 min · optional</div>
+          </div>
+          <span style={{fontSize:11,color:"#2C3A4A"}}>›</span>
+        </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:8,marginBottom:16}}>
+      {/* Week-at-a-glance: shows today's focus per day + climbing/floater hints */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:6,marginBottom:14}}>
         {DAYS.map(day=>{
-          const sk=schedule[day], meta=sk?sessionMeta[sk]:null;
-          const isMoving=movingSession===sk;
-          const exCount=sk?sessions[sk].exercises.length:0;
-          const exDone=sk?sessions[sk].exercises.filter((_,i)=>completed.has(`w${activeWeek}-${sk}-${i}`)).length:0;
-          return <div key={day} onClick={()=>(sk||movingSession)&&handleDayClick(day)} style={{borderRadius:8,overflow:"hidden",border:`1px solid ${isMoving?"#C8A84B":(sk?meta.color+"55":"#1A2535")}`,backgroundColor:sk?"#111C28":"#0D1620",cursor:(sk||movingSession)?"pointer":"default",opacity:movingSession&&sk&&!isMoving?0.45:1,transition:"all 0.15s",minHeight:110}}>
-            <div style={{padding:"5px 8px",backgroundColor:sk?meta.color:"#111C28",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:10,fontWeight:800,color:"#fff",letterSpacing:1}}>{DAY_LABELS[day]}</span>
-              {climbingDays.includes(day)&&<span style={{fontSize:9,color:"rgba(255,255,255,0.6)"}}>🧗</span>}
+          const dayLabel = DAY_LABELS[day];
+          const dayShortMap = {mon:"Mon",tue:"Tue",wed:"Wed",thu:"Thu",fri:"Fri",sat:"Sat",sun:"Sun"};
+          const dayShort = dayShortMap[day];
+          const v2 = DATA.flexibility.morningV2;
+          const focus = v2 ? v2.focusCycle.find(f=>f.days.includes(dayShort)) : null;
+          const isClimb = climbingDays.includes(day);
+          const todayIdx = new Date().getDay(); // 0=Sun..6=Sat
+          const dayIdx = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6}[day];
+          const isToday = dayIdx === todayIdx;
+          const floaterDay = {mon:"Deep Split",wed:"Deep Frog",fri:"Hip Strength"}[day];
+          return <div key={day} style={{borderRadius:7,overflow:"hidden",border:`1px solid ${isToday?"#C8A84B":(focus?focus.color+"55":"#1A2535")}`,backgroundColor:isToday?"#16120A":"#0D1620",minHeight:96,padding:"6px 6px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <span style={{fontSize:10,fontWeight:800,color:isToday?"#C8A84B":"#6A7A8D",letterSpacing:1}}>{dayLabel}</span>
+              {isClimb&&<span style={{fontSize:9}}>🧗</span>}
             </div>
-            <div style={{padding:"8px 8px 10px"}}>
-              {sk ? <>
-                <div style={{fontSize:11,fontWeight:700,color:"#D0DCE8",lineHeight:1.3,marginBottom:3}}>{meta.label}</div>
-                <div style={{fontSize:10,color:"#3A4A5A",marginBottom:7}}>{meta.duration}</div>
-                <div style={{height:3,backgroundColor:"#243344",borderRadius:2,marginBottom:3}}>
-                  <div style={{height:"100%",borderRadius:2,backgroundColor:exDone===exCount?"#2ECC71":meta.color,width:`${exCount>0?(exDone/exCount)*100:0}%`,transition:"width 0.3s"}}/>
-                </div>
-                <div style={{fontSize:9,color:"#2A3A4A",marginBottom:6}}>{exDone}/{exCount}</div>
-                <button onClick={e=>{e.stopPropagation();setMovingSession(p=>p===sk?null:sk);}} style={{width:"100%",padding:"3px 0",borderRadius:3,border:`1px solid ${isMoving?"#C8A84B":"#2A3A4A"}`,backgroundColor:isMoving?"#16120A":"transparent",color:isMoving?"#C8A84B":"#2C3C4C",fontSize:9,cursor:"pointer"}}>
-                  {isMoving?"✕ cancel":"↕ move"}
-                </button>
-              </> : <div style={{fontSize:11,color:"#1E2D3D",fontStyle:"italic",textAlign:"center",paddingTop:10}}>{day==="fri"?"rest":movingSession?"place here":"—"}</div>}
-              {(day==="sat"||day==="sun")&&<IntensityPicker day={day} value={intensities[day]} onChange={(d,v)=>setIntensities({...intensities,[d]:v})}/>}
-            </div>
+            {focus&&<div style={{fontSize:10,fontWeight:700,color:focus.color,lineHeight:1.2,marginBottom:3}}>{focus.title.split(" ")[0]}</div>}
+            {floaterDay&&<div style={{fontSize:9,color:"#4A5A6A",lineHeight:1.2,marginTop:2}}>✨ {floaterDay}</div>}
           </div>;
         })}
       </div>
-      <div style={{padding:"10px 14px",borderRadius:8,backgroundColor:"#0D1620",border:"1px solid #141E2A",display:"flex",flexWrap:"wrap",gap:8}}>
-        {Object.entries(TYPE_COLORS).map(([type,color])=>(
-          <div key={type} style={{display:"flex",alignItems:"center",gap:5}}>
-            <div style={{width:8,height:8,borderRadius:2,backgroundColor:color,flexShrink:0}}/>
-            <span style={{fontSize:10,color:"#2E3E4E"}}>{type}</span>
-          </div>
-        ))}
+      <div style={{padding:"8px 12px",borderRadius:7,backgroundColor:"#0D1620",border:"1px solid #141E2A",fontSize:10,color:"#4A5A6A",lineHeight:1.5}}>
+        Every day: Morning Routine (45 min) {"·"} 🧗 = climbing day {"·"} ✨ = optional floater
       </div>
     </div>;
   }
@@ -785,6 +862,7 @@
     const [flexTab,       setFlexTab]       = useState("plan");
     const [activeSession, setActiveSession] = useState(null);
     const [showMorning,   setShowMorning]   = useState(false);
+    const [showFloater,   setShowFloater]   = useState(false);
     const [viewWeek,      setViewWeek]      = useState(null);
     const [dlStart,       setDLStartRaw]    = useState(()=>load("dlStart",null));
     const [dlCycle,       setDLCycleRaw]    = useState(()=>load("dlCycle",1));
@@ -881,11 +959,12 @@
           </div>
         </div>
       </div>
-      {section==="flex" && flexTab==="plan" && <FlexPlanTab schedule={schedule} setSchedule={setSchedule} completed={flexCompleted} toggleExercise={toggleFlexExercise} intensities={intensities} setIntensities={setIntensities} currentWeek={flexWeek} setActiveSession={setActiveSession} showMorning={showMorning} setShowMorning={setShowMorning} viewWeek={viewWeek||flexWeek} onViewWeekChange={setViewWeek}/>}
+      {section==="flex" && flexTab==="plan" && <FlexPlanTab schedule={schedule} setSchedule={setSchedule} completed={flexCompleted} toggleExercise={toggleFlexExercise} intensities={intensities} setIntensities={setIntensities} currentWeek={flexWeek} setActiveSession={setActiveSession} showMorning={showMorning} setShowMorning={setShowMorning} showFloater={showFloater} setShowFloater={setShowFloater} viewWeek={viewWeek||flexWeek} onViewWeekChange={setViewWeek}/>}
       {section==="flex" && flexTab==="progress" && <FlexProgressTab startDate={flexStart} onSetStart={setFlexStart} entries={assessments} onAddEntry={addAssessment} currentWeek={flexWeek}/>}
       {section==="dl" && <DeadliftTab dlStartDate={dlStart} setDLStartDate={setDLStart} dlCycle={dlCycle} setDLCycle={setDLCycle} dlCompleted={dlCompleted} toggleDLExercise={toggleDLExercise} dlLogs={dlLogs} addDLLog={addDLLog}/>}
       {activeSession&&<SessionModal sessionKey={activeSession.key} week={activeSession.week} completed={flexCompleted} onToggle={toggleFlexExercise} onClose={()=>setActiveSession(null)}/>}
       {showMorning&&<MorningModal onClose={()=>setShowMorning(false)}/>}
+      {showFloater&&<FloaterModal onClose={()=>setShowFloater(false)}/>}
     </div>;
   }
 
