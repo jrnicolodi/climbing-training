@@ -1,5 +1,5 @@
 // Service Worker — caches the app shell for offline use
-const CACHE = "training-hub-v2";
+const CACHE = "training-hub-v3";
 const ASSETS = [
   "/",
   "/index.html",
