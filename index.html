@@ -277,8 +277,8 @@
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:"#C8A84B",letterSpacing:2,marginBottom:4}}>OPTIONAL</div>
-              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Floating Sessions</div>
-              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>25–30 min · where real range gains come from · skip when busy</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#E0EAF4"}}>Weekly Strength Floater</div>
+              <div style={{fontSize:11,color:"#6A7A8D",marginTop:3}}>~30 min · 1×/week, rest day or evening · strength through flexibility · skip when busy</div>
             </div>
             <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#fff",width:36,height:36,borderRadius:6,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
@@ -399,8 +399,8 @@
         <div onClick={()=>setShowFloater&&setShowFloater(true)} style={{padding:"11px 14px",borderRadius:8,backgroundColor:"#111C28",border:"1px solid #1E2D3D",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
           <span style={{fontSize:20}}>✨</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#6FA8DC"}}>Floaters</div>
-            <div style={{fontSize:10,color:"#4A5A6A"}}>25–30 min · optional</div>
+            <div style={{fontSize:12,fontWeight:700,color:"#6FA8DC"}}>Strength Floater</div>
+            <div style={{fontSize:10,color:"#4A5A6A"}}>~30 min · 1×/week · optional</div>
           </div>
           <span style={{fontSize:11,color:"#2C3A4A"}}>›</span>
         </div>
@@ -417,7 +417,7 @@
           const todayIdx = new Date().getDay(); // 0=Sun..6=Sat
           const dayIdx = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6}[day];
           const isToday = dayIdx === todayIdx;
-          const floaterDay = {mon:"Deep Split",wed:"Deep Butterfly",fri:"Hip Strength"}[day];
+          const floaterDay = {mon:"Strength (pick 1)",wed:"Strength (pick 1)",fri:"Strength (pick 1)"}[day];
           return <div key={day} style={{borderRadius:7,overflow:"hidden",border:`1px solid ${isToday?"#C8A84B":(focus?focus.color+"55":"#1A2535")}`,backgroundColor:isToday?"#16120A":"#0D1620",minHeight:96,padding:"6px 6px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <span style={{fontSize:10,fontWeight:800,color:isToday?"#C8A84B":"#6A7A8D",letterSpacing:1}}>{dayLabel}</span>
